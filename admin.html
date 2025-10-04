@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>لوحة المالك — متابعة المصروفات</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#071025;--accent:#4fd1c5;--accent2:#5a67d8}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:"Cairo",sans-serif;background:linear-gradient(180deg,var(--bg),#02102a);color:#e7f0fb;min-height:100vh}
+    .wrap{max-width:1200px;margin:28px auto;padding:18px}
+    header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.03);margin-top:16px}
+    .grid{display:grid;grid-template-columns:360px 1fr;gap:18px}
+    input,select{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.03);text-align:right;font-size:14px;color:#b8c6db}
+    th{color:#e7f0fb;font-weight:600}
+    .btn{background:linear-gradient(90deg,var(--accent),var(--accent2));border:none;color:#022036;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:700}
+    .btn:disabled{opacity:0.5;cursor:not-allowed}
+    .small{font-size:13px;color:#9fb7cc}
+    .loading{text-align:center;padding:20px;color:#9fb7cc}
+    .delete-btn{background:#ff6b6b;color:white;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px}
+    .delete-btn:hover{background:#ff5252}
+    @media(max-width:980px){ .grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>لوحة المالك</h1>
+        <div class="small" id="ownerInfo">جارٍ التحقق من الجلسة...</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="logout">تسجيل خروج</button>
+      </div>
+    </header>
+
+    <div id="lockedCard" class="card">
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="adminPassInput" type="password" placeholder="أدخل كلمة مرور المالك (محليًا)" style="flex:1" />
+        <button class="btn" id="adminUnlockBtn">فتح اللوحة</button>
+      </div>
+      <div class="small" style="margin-top:8px">كلمة المرور الافتراضية: <code>9999</code></div>
+    </div>
+
+    <div id="mainContent" style="display:none">
+      <div class="card" style="background:linear-gradient(90deg, rgba(79,209,197,0.05), rgba(90,103,216,0.05));border-color:rgba(79,209,197,0.2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="font-size:12px;color:#9fb7cc;margin-bottom:4px">حالة Firebase</div>
+            <div id="firebaseStatus" style="font-weight:700">جاري التحقق...</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" id="syncFromRealtime">تحديث من Realtime DB</button>
+            <button class="btn" id="syncFromFirestore">تحديث من Firestore</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div>
+          <div class="card">
+            <h3>مرشحات</h3>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <select id="filterType">
+                <option value="all">الكل</option>
+                <option value="invoice">فواتير</option>
+                <option value="salary">معاشات</option>
+              </select>
+              <select id="filterMandoub">
+                <option value="all">كل المندوبين</option>
+              </select>
+              <input id="filterMonth" type="month" />
+              <button class="btn" id="apply">تطبيق</button>
+            </div>
+            <div style="margin-top:14px">
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <div class="card" style="padding:10px;flex:1;min-width:120px">
+                  <div class="small">المجموع الكلي</div>
+                  <div id="sumMonth" style="font-weight:800;font-size:18px;color:#4fd1c5;margin-top:4px">0 ر.ق</div>
+                </div>
+                <div class="card" style="padding:10px;flex:1;min-width:120px">
+                  <div class="small">الفواتير</div>
+                  <div id="sumInv" style="font-weight:800;font-size:18px;color:#5a67d8;margin-top:4px">0 ر.ق</div>
+                </div>
+                <div class="card" style="padding:10px;flex:1;min-width:120px">
+                  <div class="small">المعاشات</div>
+                  <div id="sumSal" style="font-weight:800;font-size:18px;color:#e7f0fb;margin-top:4px">0 ر.ق</div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:12px;display:flex;gap:8px">
+              <button class="btn" id="exportCsv">تصدير CSV</button>
+              <button class="btn" id="refresh" style="background:transparent;color:#9fb7cc;border:1px solid rgba(255,255,255,0.03)">تحديث</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <h3>قائمة العمليات (<span id="recordCount">0</span> سجل) - مصدر البيانات: <span id="dataSource">-</span></h3>
+            <div style="max-height:460px;overflow:auto" id="tableContainer">
+              <table>
+                <thead>
+                  <tr>
+                    <th>النوع</th>
+                    <th>الفئة/الاسم</th>
+                    <th>المندوب</th>
+                    <th>المبلغ</th>
+                    <th>التاريخ</th>
+                    <th>ملاحظة</th>
+                    <th>إجراء</th>
+                  </tr>
+                </thead>
+                <tbody id="tableBody">
+                  <tr><td colspan="7" class="loading">جاري تحميل البيانات...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-analytics-compat.js"></script>
+
+<script>
+  // ========== Session & Auth ==========
+  const SESSION_KEY = 'app_session_v1';
+  function getSession(){ 
+    try{ 
+      return JSON.parse(localStorage.getItem(SESSION_KEY)||'null'); 
+    } catch(e){ 
+      return null; 
+    } 
+  }
+
+  const sess = getSession();
+  if(sess && sess.role === 'admin') {
+    document.getElementById('ownerInfo').textContent = `المستخدم: ${sess.username} — دور: ${sess.role}`;
+    document.getElementById('lockedCard').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+    initializeFirebase();
+  } else {
+    document.getElementById('ownerInfo').textContent = 'غير مسجل كمالك — سجّل الدخول أولًا';
+  }
+
+  document.getElementById('logout').addEventListener('click', ()=> { 
+    localStorage.removeItem(SESSION_KEY); 
+    window.location.href='login.html'; 
+  });
+
+  // ========== Local Password ==========
+  const OWNER_PASS = '9999';
+  document.getElementById('adminUnlockBtn').addEventListener('click', ()=>{
+    const v = document.getElementById('adminPassInput').value.trim();
+    if(v === OWNER_PASS){
+      document.getElementById('lockedCard').style.display='none';
+      document.getElementById('mainContent').style.display='block';
+      initializeFirebase();
+    } else {
+      alert('كلمة مرور خاطئة');
+    }
+  });
+
+  // ========== Firebase Configuration ==========
+  const firebaseConfig = {
+    apiKey: "AIzaSyAZdj86H_cYRTP2xQfF0_YqnCZDPnRnWis",
+    authDomain: "mandouby-79556.firebaseapp.com",
+    databaseURL: "https://mandouby-79556-default-rtdb.firebaseio.com",
+    projectId: "mandouby-79556",
+    storageBucket: "mandouby-79556.firebasestorage.app",
+    messagingSenderId: "842326054163",
+    appId: "1:842326054163:web:32d2611067e45c30ef76e6",
+    measurementId: "G-EJ14KM885Y"
+  };
+
+  let useFirebase = false;
+  let database = null;
+  let db = null;
+  let analytics = null;
+  let allTransactions = [];
+  let mandoubsList = new Set();
+  let currentDataSource = 'none';
+
+  // ========== Initialize Firebase ==========
+  function initializeFirebase() {
+    try {
+      const app = firebase.initializeApp(firebaseConfig);
+      database = firebase.database();
+      db = firebase.firestore();
+      analytics = firebase.analytics();
+      useFirebase = true;
+      document.getElementById('firebaseStatus').innerHTML = '✅ متصل (Realtime DB + Firestore)<br><span style="font-size:11px;color:#9fb7cc">جاهز لجلب البيانات</span>';
+      console.log('Firebase initialized successfully');
+      // تحميل من Realtime Database افتراضياً
+      loadFromRealtimeDatabase();
+    } catch(e){ 
+      console.error('Firebase initialization error:', e);
+      document.getElementById('firebaseStatus').innerHTML = '❌ غير متصل<br><span style="font-size:11px;color:#ff6b6b">تحقق من الإعدادات</span>';
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="loading" style="color:#ff6b6b">Firebase غير متصل</td></tr>';
+    }
+  }
+
+  // ========== Load from Realtime Database ==========
+  async function loadFromRealtimeDatabase(){
+    if(!useFirebase || !database){
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="loading" style="color:#ff6b6b">Realtime Database غير متصل</td></tr>';
+      return;
+    }
+
+    try {
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="loading">🔄 جاري جلب البيانات من Realtime Database...</td></tr>';
+      
+      const snapshot = await database.ref('transactions').limitToLast(1000).once('value');
+      
+      allTransactions = [];
+      mandoubsList.clear();
+
+      snapshot.forEach((childSnapshot) => {
+        const data = childSnapshot.val();
+        allTransactions.push({
+          id: childSnapshot.key,
+          type: data.type,
+          category: data.category || null,
+          name: data.name || null,
+          amount: Number(data.amount || 0),
+          date: data.date ? new Date(data.date) : new Date(),
+          note: data.note || '',
+          mandoub: data.mandoub || 'غير محدد',
+          createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
+          source: 'realtime'
+        });
+
+        if(data.mandoub) mandoubsList.add(data.mandoub);
+      });
+
+      // ترتيب من الأحدث للأقدم
+      allTransactions.sort((a, b) => b.createdAt - a.createdAt);
+
+      currentDataSource = 'Realtime Database';
+      document.getElementById('dataSource').textContent = currentDataSource;
+      document.getElementById('dataSource').style.color = '#4fd1c5';
+
+      console.log(`✅ تم تحميل ${allTransactions.length} عملية من Realtime Database`);
+      
+      updateMandoubFilter();
+      renderTable(allTransactions);
+      updateTotals(allTransactions);
+
+    } catch(error) {
+      console.error('Error loading from Realtime Database:', error);
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="loading" style="color:#ff6b6b">❌ خطأ في تحميل البيانات: ' + error.message + '</td></tr>';
+    }
+  }
+
+  // ========== Load from Firestore ==========
+  async function loadFromFirestore(){
+    if(!useFirebase || !db){
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="loading" style="color:#ff6b6b">Firestore غير متصل</td></tr>';
+      return;
+    }
+
+    try {
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="loading">🔄 جاري جلب البيانات من Firestore...</td></tr>';
+      
+      const snapshot = await db.collection('transactions')
+        .orderBy('createdAt', 'desc')
+        .limit(1000)
+        .get();
+
+      allTransactions = [];
+      mandoubsList.clear();
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        allTransactions.push({
+          id: doc.id,
+          type: data.type,
+          category: data.category || null,
+          name: data.name || null,
+          amount: Number(data.amount || 0),
+          date: data.date ? (data.date.toDate ? data.date.toDate() : new Date(data.date)) : new Date(),
+          note: data.note || '',
+          mandoub: data.mandoub || 'غير محدد',
+          createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt)) : new Date(),
+          source: 'firestore'
+        });
+
+        if(data.mandoub) mandoubsList.add(data.mandoub);
+      });
+
+      currentDataSource = 'Firestore';
+      document.getElementById('dataSource').textContent = currentDataSource;
+      document.getElementById('dataSource').style.color = '#5a67d8';
+
+      console.log(`✅ تم تحميل ${allTransactions.length} عملية من Firestore`);
+      
+      updateMandoubFilter();
+      renderTable(allTransactions);
+      updateTotals(allTransactions);
+
+    } catch(error) {
+      console.error('Error loading from Firestore:', error);
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="loading" style="color:#ff6b6b">❌ خطأ في تحميل البيانات: ' + error.message + '</td></tr>';
+    }
+  }
+
+  // ========== Update Mandoub Filter ==========
+  function updateMandoubFilter() {
+    const select = document.getElementById('filterMandoub');
+    select.innerHTML = '<option value="all">كل المندوبين</option>';
+    
+    Array.from(mandoubsList).sort().forEach(mandoub => {
+      const option = document.createElement('option');
+      option.value = mandoub;
+      option.textContent = mandoub;
+      select.appendChild(option);
+    });
+  }
+
+  // ========== Render Table ==========
+  function renderTable(data){
+    const tbody = document.getElementById('tableBody'); 
+    tbody.innerHTML = '';
+    
+    if(!data || !data.length){
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9fb7cc;padding:30px">📭 لا توجد بيانات للعرض</td></tr>';
+      document.getElementById('recordCount').textContent = '0';
+      return;
+    }
+
+    document.getElementById('recordCount').textContent = data.length;
+
+    data.forEach(op=>{
+      const tr = document.createElement('tr');
+      const label = op.type === 'invoice' ? 'فاتورة' : 'معاش';
+      const cat = op.category || op.name || '-';
+      const mand = op.mandoub || 'غير محدد';
+      const amt = op.amount.toFixed(2);
+      const dt = op.date.toLocaleDateString('ar-QA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const typeColor = op.type === 'invoice' ? '#5a67d8' : '#4fd1c5';
+      const sourceIcon = op.source === 'realtime' ? '🔥' : '☁️';
+      
+      tr.innerHTML = `
+        <td><span style="color:${typeColor};font-weight:600">${label}</span> ${sourceIcon}</td>
+        <td>${cat}</td>
+        <td style="color:#9fb7cc">${mand}</td>
+        <td style="font-weight:800;color:#e7f0fb">${amt} ر.ق</td>
+        <td style="color:#9fb7cc;font-size:13px">${dt}</td>
+        <td style="color:#9fb7cc;font-size:12px">${op.note || '-'}</td>
+        <td><button class="delete-btn" data-id="${op.id}" data-source="${op.source}">حذف</button></td>
+      `;
+      
+      tbody.appendChild(tr);
+
+      tr.querySelector('.delete-btn').addEventListener('click', () => deleteTransaction(op.id, op.source));
+    });
+  }
+
+  // ========== Delete Transaction ==========
+  async function deleteTransaction(docId, source) {
+    if(!confirm('هل أنت متأكد من حذف هذه العملية؟\n\n⚠️ لا يمكن التراجع عن هذا الإجراء!')) {
+      return;
+    }
+
+    try {
+      if(source === 'realtime') {
+        await database.ref('transactions/' + docId).remove();
+        console.log('تم حذف العملية من Realtime Database:', docId);
+      } else if(source === 'firestore') {
+        await db.collection('transactions').doc(docId).delete();
+        console.log('تم حذف العملية من Firestore:', docId);
+      }
+      
+      if(analytics) {
+        analytics.logEvent('delete_transaction', { doc_id: docId, source: source });
+      }
+
+      alert('✅ تم حذف العملية بنجاح');
+      
+      // إعادة تحميل البيانات
+      if(source === 'realtime') {
+        await loadFromRealtimeDatabase();
+      } else {
+        await loadFromFirestore();
+      }
+      
+    } catch(error) {
+      console.error('Error deleting transaction:', error);
+      alert('❌ حدث خطأ أثناء الحذف:\n' + error.message);
+    }
+  }
+
+  // ========== Update Totals ==========
+  function updateTotals(data) {
+    let totalAmount = 0;
+    let invoicesAmount = 0;
+    let salariesAmount = 0;
+
+    data.forEach(op => {
+      const amount = op.amount;
+      totalAmount += amount;
+      
+      if(op.type === 'invoice') {
+        invoicesAmount += amount;
+      } else if(op.type === 'salary') {
+        salariesAmount += amount;
+      }
+    });
+
+    document.getElementById('sumMonth').textContent = totalAmount.toFixed(2) + ' ر.ق';
+    document.getElementById('sumInv').textContent = invoicesAmount.toFixed(2) + ' ر.ق';
+    document.getElementById('sumSal').textContent = salariesAmount.toFixed(2) + ' ر.ق';
+  }
+
+  // ========== Apply Filters ==========
+  document.getElementById('apply').addEventListener('click', () => {
+    const typeFilter = document.getElementById('filterType').value;
+    const mandoubFilter = document.getElementById('filterMandoub').value;
+    const monthFilter = document.getElementById('filterMonth').value;
+
+    let filtered = allTransactions.slice();
+
+    if(typeFilter !== 'all') {
+      filtered = filtered.filter(op => op.type === typeFilter);
+    }
+
+    if(mandoubFilter !== 'all') {
+      filtered = filtered.filter(op => op.mandoub === mandoubFilter);
+    }
+
+    if(monthFilter) {
+      const [year, month] = monthFilter.split('-');
+      filtered = filtered.filter(op => {
+        const opDate = new Date(op.date);
+        return opDate.getFullYear() === Number(year) && (opDate.getMonth() + 1) === Number(month);
+      });
+    }
+
+    renderTable(filtered);
+    updateTotals(filtered);
+  });
+
+  // ========== Button Events ==========
+  document.getElementById('syncFromRealtime').addEventListener('click', async () => {
+    const btn = document.getElementById('syncFromRealtime');
+    const originalText = btn.textContent;
+    btn.textContent = 'جاري التحميل...';
+    btn.disabled = true;
+    await loadFromRealtimeDatabase();
+    alert('✅ تم تحديث البيانات من Realtime Database');
+    btn.textContent = originalText;
+    btn.disabled = false;
+  });
+
+  document.getElementById('syncFromFirestore').addEventListener('click', async () => {
+    const btn = document.getElementById('syncFromFirestore');
+    const originalText = btn.textContent;
+    btn.textContent = 'جاري التحميل...';
+    btn.disabled = true;
+    await loadFromFirestore();
+    alert('✅ تم تحديث البيانات من Firestore');
+    btn.textContent = originalText;
+    btn.disabled = false;
+  });
+
+  document.getElementById('refresh').addEventListener('click', async () => {
+    const btn = document.getElementById('refresh');
+    const originalText = btn.textContent;
+    btn.textContent = 'جاري التحديث...';
+    btn.disabled = true;
+    if(currentDataSource === 'Realtime Database') {
+      await loadFromRealtimeDatabase();
+    } else {
+      await loadFromFirestore();
+    }
+    btn.textContent = originalText;
+    btn.disabled = false;
+  });
+
+  // ========== Export to CSV ==========
+  document.getElementById('exportCsv').addEventListener('click', () => {
+    if(!allTransactions.length) {
+      alert('❌ لا توجد بيانات للتصدير');
+      return;
+    }
+
+    const rows = [['النوع', 'الفئة/الاسم', 'المندوب', 'المبلغ', 'التاريخ', 'ملاحظة', 'وقت الإنشاء', 'المصدر']];
+    
+    allTransactions.forEach(op => {
+      const dt = op.date.toLocaleDateString('ar-QA');
+      const ct = op.createdAt.toLocaleString('ar-QA');
+      
+      rows.push([
+        op.type === 'invoice' ? 'فاتورة' : 'معاش',
+        op.category || op.name || '',
+        op.mandoub || '',
+        op.amount.toFixed(2),
+        dt,
+        op.note || '',
+        ct,
+        op.source === 'realtime' ? 'Realtime Database' : 'Firestore'
+      ]);
+    });
+
+    const csv = '\uFEFF' + rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); 
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); 
+    a.href = url; 
+    a.download = `transactions_${new Date().toISOString().slice(0,10)}.csv`; 
+    a.click(); 
+    URL.revokeObjectURL(url);
+
+    alert('✅ تم تصدير الملف بنجاح!');
+
+    if(analytics) {
+      analytics.logEvent('export_csv', { record_count: allTransactions.length, source: currentDataSource });
+    }
+  });
+
+</script>
+</body>
+</html>

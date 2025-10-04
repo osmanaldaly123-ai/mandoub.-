@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>تسجيل الدخول — نظام تخليص المعاملات</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:"Cairo",sans-serif;background:linear-gradient(180deg,#071025,#02102a);color:#e6eef8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .box{width:100%;max-width:420px;padding:26px;border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.03)}
+    h2{margin:0 0 10px;font-size:24px}
+    .subtitle{color:#9fb7cc;font-size:14px;margin-bottom:20px}
+    label{display:block;color:#b8c6db;margin-top:12px;font-size:14px;font-weight:500}
+    input{width:100%;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;margin-top:6px;font-size:15px;transition:border-color 0.3s}
+    input:focus{outline:none;border-color:rgba(79,209,197,0.4)}
+    .btn{background:linear-gradient(90deg,#4fd1c5,#5a67d8);border:none;padding:12px 14px;border-radius:10px;color:#022036;font-weight:800;cursor:pointer;margin-top:12px;width:100%;font-size:15px;transition:transform 0.2s}
+    .btn:hover{transform:translateY(-2px)}
+    .btn:active{transform:translateY(0)}
+    .btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+    .btn-secondary{background:transparent;color:#b8c6db;border:1px solid rgba(255,255,255,0.08);margin-top:8px}
+    .hint{color:#9fb7cc;font-size:13px;margin-top:14px;line-height:1.5}
+    .creds{background:rgba(79,209,197,0.05);padding:12px;border-radius:8px;margin-top:16px;font-size:13px;color:#cfeff1;border:1px solid rgba(79,209,197,0.1)}
+    .status{margin-top:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center}
+    .status.success{background:rgba(79,209,197,0.1);color:#4fd1c5;border:1px solid rgba(79,209,197,0.2)}
+    .status.error{background:rgba(255,107,107,0.1);color:#ff6b6b;border:1px solid rgba(255,107,107,0.2)}
+    .status.info{background:rgba(90,103,216,0.1);color:#5a67d8;border:1px solid rgba(90,103,216,0.2)}
+  </style>
+</head>
+<body>
+  <div class="box" role="main" aria-labelledby="title">
+    <h2 id="title">تسجيل الدخول</h2>
+    <div class="subtitle">سجّل دخولك كـ مندوب أو مالك للوصول للنظام</div>
+
+    <div id="statusDiv"></div>
+
+    <label>اسم المستخدم</label>
+    <input id="username" placeholder="مثال: mandoub أو admin" autocomplete="username" />
+
+    <label>كلمة المرور</label>
+    <input id="password" type="password" placeholder="أدخل كلمة المرور" autocomplete="current-password" />
+
+    <button class="btn" id="loginBtn">تسجيل الدخول</button>
+    <button class="btn btn-secondary" id="guestBtn">تجربة كزائر</button>
+
+    <div class="hint">
+      🔒 يتم حفظ الجلسة محليًا في المتصفح<br>
+      ☁️ حالة Firebase: <strong id="firebaseStatus">جاري التحقق...</strong>
+    </div>
+
+    <div class="creds">
+      <strong>📋 بيانات تجريبية:</strong><br>
+      • مندوب: <strong>mandoub</strong> / <strong>1234</strong><br>
+      • مالك: <strong>admin</strong> / <strong>9999</strong>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-analytics-compat.js"></script>
+
+<script>
+  // Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyAZdj86H_cYRTP2xQfF0_YqnCZDPnRnWis",
+    authDomain: "mandouby-79556.firebaseapp.com",
+    databaseURL: "https://mandouby-79556-default-rtdb.firebaseio.com",
+    projectId: "mandouby-79556",
+    storageBucket: "mandouby-79556.firebasestorage.app",
+    messagingSenderId: "842326054163",
+    appId: "1:842326054163:web:32d2611067e45c30ef76e6",
+    measurementId: "G-EJ14KM885Y"
+  };
+
+  let useFirestore = false;
+  let db = null;
+  let analytics = null;
+
+  try {
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    analytics = firebase.analytics();
+    useFirestore = true;
+    document.getElementById('firebaseStatus').textContent = '✅ متصل';
+    document.getElementById('firebaseStatus').style.color = '#4fd1c5';
+    console.log('Firebase initialized successfully');
+  } catch(e){ 
+    console.warn('Firebase initialization error:', e);
+    document.getElementById('firebaseStatus').textContent = '⚠️ غير متصل (وضع محلي)';
+    document.getElementById('firebaseStatus').style.color = '#ff6b6b';
+  }
+
+  // خريطة المستخدمين البسيطة
+  const USERS = {
+    mandoub: { role: 'mandoub', pass: '1234', displayName: 'المندوب الرئيسي' },
+    admin:   { role: 'admin', pass: '9999', displayName: 'المالك' }
+  };
+
+  const SESSION_KEY = 'app_session_v1';
+  const statusDiv = document.getElementById('statusDiv');
+  const loginBtn = document.getElementById('loginBtn');
+  const usernameInput = document.getElementById('username');
+  const passwordInput = document.getElementById('password');
+
+  function showStatus(message, type = 'info') {
+    statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+    setTimeout(() => {
+      if(type !== 'error') statusDiv.innerHTML = '';
+    }, 3000);
+  }
+
+  async function logLoginToFirestore(username, role) {
+    if(!useFirestore) return;
+    try {
+      await db.collection('login_logs').add({
+        username: username,
+        role: role,
+        timestamp: new Date(),
+        userAgent: navigator.userAgent,
+        ip: 'client-side' // في التطبيق الحقيقي، يجب استخدام Cloud Function للحصول على IP
+      });
+      console.log('Login logged to Firestore');
+    } catch(e) {
+      console.warn('Failed to log login:', e);
+    }
+  }
+
+  async function handleLogin() {
+    const u = usernameInput.value.trim();
+    const p = passwordInput.value.trim();
+    
+    if(!u || !p){ 
+      showStatus('⚠️ يرجى إدخال اسم المستخدم وكلمة المرور', 'error');
+      return; 
+    }
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'جاري تسجيل الدخول...';
+
+    // محاكاة تأخير بسيط للتحقق
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    if(USERS[u] && USERS[u].pass === p){
+      // حفظ الجلسة البسيطة في localStorage
+      const session = { 
+        username: u, 
+        displayName: USERS[u].displayName,
+        role: USERS[u].role, 
+        loggedAt: new Date().toISOString() 
+      };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+      // تسجيل الدخول في Firebase
+      await logLoginToFirestore(u, USERS[u].role);
+
+      // تسجيل حدث Analytics
+      if(analytics) {
+        analytics.logEvent('login', {
+          method: 'username_password',
+          role: USERS[u].role
+        });
+      }
+
+      showStatus('✅ تم تسجيل الدخول بنجاح!', 'success');
+
+      // توجيه حسب الدور
+      setTimeout(() => {
+        if(USERS[u].role === 'mandoub') window.location.href = 'mandoub.html';
+        else if(USERS[u].role === 'admin') window.location.href = 'admin.html';
+        else window.location.href = 'mandoub.html';
+      }, 800);
+    } else {
+      showStatus('❌ اسم المستخدم أو كلمة المرور غير صحيحة', 'error');
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'تسجيل الدخول';
+      
+      // هز الصندوق للإشارة للخطأ
+      document.querySelector('.box').style.animation = 'shake 0.5s';
+      setTimeout(() => {
+        document.querySelector('.box').style.animation = '';
+      }, 500);
+    }
+  }
+
+  loginBtn.addEventListener('click', handleLogin);
+
+  // تسجيل الدخول عند الضغط على Enter
+  passwordInput.addEventListener('keypress', (e) => {
+    if(e.key === 'Enter') handleLogin();
+  });
+  usernameInput.addEventListener('keypress', (e) => {
+    if(e.key === 'Enter') handleLogin();
+  });
+
+  // تجربة كزائر
+  document.getElementById('guestBtn').addEventListener('click', async ()=>{
+    const session = { 
+      username: 'guest', 
+      displayName: 'زائر',
+      role: 'mandoub', 
+      loggedAt: new Date().toISOString() 
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    
+    await logLoginToFirestore('guest', 'mandoub');
+    
+    if(analytics) {
+      analytics.logEvent('login', {
+        method: 'guest',
+        role: 'mandoub'
+      });
+    }
+    
+    showStatus('✅ تم الدخول كزائر', 'success');
+    setTimeout(() => {
+      window.location.href = 'mandoub.html';
+    }, 500);
+  });
+
+  // إذا كان المستخدم مسجلاً بالفعل فنوّجهه تلقائيًا
+  (function autoRedirectIfLogged(){
+    try {
+      const s = JSON.parse(localStorage.getItem(SESSION_KEY)||'null');
+      if(s && s.role) {
+        showStatus('🔄 لديك جلسة نشطة، جاري التوجيه...', 'info');
+        setTimeout(() => {
+          if(s.role === 'mandoub' || s.role === 'guest') window.location.href = 'mandoub.html';
+          else if(s.role === 'admin') window.location.href = 'admin.html';
+        }, 1000);
+      }
+    } catch(e){}
+  })();
+
+  // إضافة animation للهز عند الخطأ
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      10%, 30%, 50%, 70%, 90% { transform: translateX(-8px); }
+      20%, 40%, 60%, 80% { transform: translateX(8px); }
+    }
+  `;
+  document.head.appendChild(style);
+</script>
+</body>
+</html>

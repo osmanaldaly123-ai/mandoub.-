@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>مندوبي — الفواتير والمعاشات</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#071025;--accent:#4fd1c5;--accent2:#5a67d8}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:"Cairo",sans-serif;background:linear-gradient(180deg,var(--bg),#02102a);color:#e7f0fb;min-height:100vh}
+    .wrap{max-width:1100px;margin:28px auto;padding:18px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    header h1{margin:0;font-size:20px}
+    .btn{background:linear-gradient(90deg,var(--accent),var(--accent2));border:none;color:#022036;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:700}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.03);margin-top:16px}
+    .grid{display:grid;grid-template-columns:1fr 380px;gap:18px}
+    label{display:block;color:#b8c6db;margin-top:8px}
+    input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;margin-top:6px}
+    .list{margin-top:12px;display:flex;flex-direction:column;gap:10px;max-height:420px;overflow:auto}
+    .item{display:flex;justify-content:space-between;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.02)}
+    .small{font-size:13px;color:#9fb7cc}
+    @media(max-width:900px){ .grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>لوحة المندوب</h1>
+        <div class="small" id="userInfo">مرحبًا — جاري جلب بيانات الجلسة...</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn" id="goAdmin">الانتقال إلى لوحة المالك</button>
+        <button class="btn" id="logout">تسجيل خروج</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h3 style="margin:0 0 8px">إضافة فاتورة</h3>
+          <form id="invoiceForm">
+            <label>الفئة</label>
+            <select id="invoiceCategory"><option>عمال</option><option>صيدلية</option><option>بقالة</option><option>مصاريف أخرى</option></select>
+            <label>المبلغ</label><input id="invoiceAmount" type="number" step="0.01" required/>
+            <label>التاريخ</label><input id="invoiceDate" type="date" required/>
+            <label>ملاحظة</label><textarea id="invoiceNote"></textarea>
+            <div style="margin-top:10px;display:flex;gap:8px">
+              <button class="btn" type="submit">حفظ الفاتورة</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 8px">إضافة معاش عامل</h3>
+          <form id="salaryForm">
+            <label>اسم العامل</label><input id="salaryName" required/>
+            <label>المبلغ</label><input id="salaryAmount" type="number" step="0.01" required/>
+            <label>التاريخ</label><input id="salaryDate" type="date" required/>
+            <label>ملاحظة</label><textarea id="salaryNote"></textarea>
+            <div style="margin-top:10px"><button class="btn" type="submit">حفظ المعاش</button></div>
+          </form>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3 style="margin:0 0 8px">العمليات الأخيرة</h3>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button class="btn" id="refresh">تحديث</button>
+          </div>
+
+          <div class="list" id="opsList">
+            <div class="small">جاري تحميل العمليات...</div>
+          </div>
+
+          <div class="small" style="margin-top:8px">
+            حالة Firebase: <span id="firebaseStatus">جاري التحقق...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-analytics-compat.js"></script>
+
+<script>
+  // ====== جلسة المستخدم وحقوق الوصول ======
+  const SESSION_KEY = 'app_session_v1';
+  function getSession(){ try { return JSON.parse(localStorage.getItem(SESSION_KEY)||'null'); } catch(e){ return null; } }
+
+  // تحقق أن المستخدم مندوب (أو على الأقل مسجل)
+  const session = getSession();
+  if(!session){ window.location.href = 'login.html'; }
+  if(session.role !== 'mandoub' && session.role !== 'guest'){ alert('ممنوع الوصول'); window.location.href='login.html'; }
+
+  // عرض اسم المندوب
+  document.getElementById('userInfo').textContent = `المندوب: ${session.username} — الدور: ${session.role}`;
+
+  // أزرار
+  document.getElementById('logout').addEventListener('click', ()=> { localStorage.removeItem(SESSION_KEY); window.location.href='login.html'; });
+  document.getElementById('goAdmin').addEventListener('click', ()=> { window.location.href='admin.html'; });
+
+  // ====== Firebase configuration ======
+  const firebaseConfig = {
+    apiKey: "AIzaSyAZdj86H_cYRTP2xQfF0_YqnCZDPnRnWis",
+    authDomain: "mandouby-79556.firebaseapp.com",
+    databaseURL: "https://mandouby-79556-default-rtdb.firebaseio.com",
+    projectId: "mandouby-79556",
+    storageBucket: "mandouby-79556.firebasestorage.app",
+    messagingSenderId: "842326054163",
+    appId: "1:842326054163:web:32d2611067e45c30ef76e6",
+    measurementId: "G-EJ14KM885Y"
+  };
+
+  let useFirebase = false;
+  let database = null;
+  let db = null;
+  let analytics = null;
+
+  try {
+    // Initialize Firebase
+    const app = firebase.initializeApp(firebaseConfig);
+    
+    // Realtime Database
+    database = firebase.database();
+    
+    // Firestore (للتوافق مع صفحة الأدمن)
+    db = firebase.firestore();
+    
+    // Analytics
+    analytics = firebase.analytics();
+    
+    useFirebase = true;
+    document.getElementById('firebaseStatus').textContent = '✅ متصل (Realtime Database + Firestore)';
+    document.getElementById('firebaseStatus').style.color = '#4fd1c5';
+    console.log('Firebase initialized successfully (Realtime Database + Firestore)');
+    loadRecentOps();
+  } catch(e){ 
+    console.warn('Firebase initialization error:', e);
+    document.getElementById('firebaseStatus').textContent = '❌ غير متصل';
+    document.getElementById('firebaseStatus').style.color = '#ff6b6b';
+  }
+
+  // ====== أدوات للعناصر والواجهة ======
+  const opsList = document.getElementById('opsList');
+  const invoiceForm = document.getElementById('invoiceForm');
+  const salaryForm = document.getElementById('salaryForm');
+
+  // ====== عرض العمليات الأخيرة من Realtime Database ======
+  async function loadRecentOps(){
+    if(!useFirebase || !database){
+      opsList.innerHTML = '<div class="small">Firebase غير متصل</div>';
+      return;
+    }
+
+    try {
+      const ref = database.ref('transactions');
+      
+      // الاستماع للتغييرات في الوقت الفعلي
+      ref.orderByChild('mandoub').equalTo(session.username).limitToLast(10).on('value', (snapshot) => {
+        opsList.innerHTML = '';
+        
+        const data = [];
+        snapshot.forEach((childSnapshot) => {
+          data.push({
+            key: childSnapshot.key,
+            ...childSnapshot.val()
+          });
+        });
+
+        if(data.length === 0){
+          opsList.innerHTML = '<div class="small">لا توجد عمليات سابقة</div>';
+          return;
+        }
+
+        // عرض البيانات من الأحدث للأقدم
+        data.reverse().forEach(op => {
+          const div = document.createElement('div');
+          div.className = 'item';
+          
+          const typeLabel = op.type === 'invoice' ? 'فاتورة' : 'معاش';
+          const categoryOrName = op.category || op.name || '-';
+          const amount = Number(op.amount || 0).toFixed(2);
+          const date = op.createdAt ? new Date(op.createdAt).toLocaleDateString('ar-QA') : '-';
+          
+          div.innerHTML = `
+            <div>
+              <strong>${typeLabel}</strong> — ${categoryOrName}
+              <div class="small">${date}</div>
+            </div>
+            <div style="text-align:left">
+              <div style="font-weight:800">${amount} ر.ق</div>
+              <div class="small">${op.note || ''}</div>
+            </div>
+          `;
+          
+          opsList.appendChild(div);
+        });
+      });
+
+    } catch(error) {
+      console.error('Error loading operations:', error);
+      opsList.innerHTML = '<div class="small" style="color:#ff6b6b">خطأ في تحميل العمليات</div>';
+    }
+  }
+
+  // ====== إضافة فاتورة ======
+  invoiceForm.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    
+    if(!useFirebase || !database){
+      alert('❌ Firebase غير متصل. لا يمكن حفظ البيانات.');
+      return;
+    }
+
+    const submitBtn = invoiceForm.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'جاري الحفظ...';
+
+    try {
+      const invoiceData = {
+        type: 'invoice',
+        category: document.getElementById('invoiceCategory').value,
+        amount: Number(document.getElementById('invoiceAmount').value),
+        date: document.getElementById('invoiceDate').value,
+        note: document.getElementById('invoiceNote').value || '',
+        mandoub: session.username,
+        createdAt: new Date().toISOString()
+      };
+
+      // حفظ في Realtime Database
+      await database.ref('transactions').push(invoiceData);
+      
+      // حفظ في Firestore أيضاً (للتوافق مع صفحة الأدمن)
+      await db.collection('transactions').add({
+        ...invoiceData,
+        date: new Date(invoiceData.date),
+        createdAt: new Date()
+      });
+      
+      alert('✅ تم حفظ الفاتورة في Firebase بنجاح!');
+      invoiceForm.reset();
+      
+      // إعادة تعيين التاريخ
+      document.getElementById('invoiceDate').value = new Date().toISOString().split('T')[0];
+
+      // تسجيل في Analytics
+      if(analytics){
+        analytics.logEvent('add_invoice', {
+          category: invoiceData.category,
+          amount: invoiceData.amount,
+          mandoub: session.username
+        });
+      }
+
+    } catch(error) {
+      console.error('Error adding invoice:', error);
+      alert('❌ حدث خطأ أثناء حفظ الفاتورة:\n' + error.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    }
+  });
+
+  // ====== إضافة معاش ======
+  salaryForm.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    
+    if(!useFirebase || !database){
+      alert('❌ Firebase غير متصل. لا يمكن حفظ البيانات.');
+      return;
+    }
+
+    const submitBtn = salaryForm.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'جاري الحفظ...';
+
+    try {
+      const salaryData = {
+        type: 'salary',
+        name: document.getElementById('salaryName').value,
+        amount: Number(document.getElementById('salaryAmount').value),
+        date: document.getElementById('salaryDate').value,
+        note: document.getElementById('salaryNote').value || '',
+        mandoub: session.username,
+        createdAt: new Date().toISOString()
+      };
+
+      // حفظ في Realtime Database
+      await database.ref('transactions').push(salaryData);
+      
+      // حفظ في Firestore أيضاً (للتوافق مع صفحة الأدمن)
+      await db.collection('transactions').add({
+        ...salaryData,
+        date: new Date(salaryData.date),
+        createdAt: new Date()
+      });
+      
+      alert('✅ تم حفظ المعاش في Firebase بنجاح!');
+      salaryForm.reset();
+      
+      // إعادة تعيين التاريخ
+      document.getElementById('salaryDate').value = new Date().toISOString().split('T')[0];
+
+      // تسجيل في Analytics
+      if(analytics){
+        analytics.logEvent('add_salary', {
+          worker_name: salaryData.name,
+          amount: salaryData.amount,
+          mandoub: session.username
+        });
+      }
+
+    } catch(error) {
+      console.error('Error adding salary:', error);
+      alert('❌ حدث خطأ أثناء حفظ المعاش:\n' + error.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    }
+  });
+
+  // ====== زر التحديث ======
+  document.getElementById('refresh').addEventListener('click', ()=> {
+    loadRecentOps();
+    alert('✅ تم تحديث القائمة');
+  });
+
+  // ====== تعيين التاريخ الحالي تلقائياً ======
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('invoiceDate').value = today;
+  document.getElementById('salaryDate').value = today;
+
+</script>
+</body>
+</html>
