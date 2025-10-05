@@ -43,7 +43,7 @@
         <input id="adminPassInput" type="password" placeholder="أدخل كلمة مرور المالك (محليًا)" style="flex:1" />
         <button class="btn" id="adminUnlockBtn">فتح اللوحة</button>
       </div>
-      <div class="small" style="margin-top:8px">كلمة المرور الافتراضية: <code>9999</code></div>
+      <div class="small" style="margin-top:8px">كلمة المرور: <code>admin2025</code></div>
     </div>
 
     <div id="mainContent" style="display:none">
@@ -156,11 +156,11 @@
 
   document.getElementById('logout').addEventListener('click', ()=> { 
     localStorage.removeItem(SESSION_KEY); 
-    window.location.href='login.html'; 
+    window.location.href='index.html'; 
   });
 
   // ========== Local Password ==========
-  const OWNER_PASS = '9999';
+  const OWNER_PASS = 'admin2025';
   document.getElementById('adminUnlockBtn').addEventListener('click', ()=>{
     const v = document.getElementById('adminPassInput').value.trim();
     if(v === OWNER_PASS){

@@ -94,16 +94,16 @@
   const SESSION_KEY = 'app_session_v1';
   function getSession(){ try { return JSON.parse(localStorage.getItem(SESSION_KEY)||'null'); } catch(e){ return null; } }
 
-  // تحقق أن المستخدم مندوب (أو على الأقل مسجل)
+  // تحقق أن المستخدم مندوب
   const session = getSession();
-  if(!session){ window.location.href = 'login.html'; }
-  if(session.role !== 'mandoub' && session.role !== 'guest'){ alert('ممنوع الوصول'); window.location.href='login.html'; }
+  if(!session){ window.location.href = 'index.html'; }
+  if(session.role !== 'mandoub'){ alert('ممنوع الوصول - يجب تسجيل الدخول كمندوب'); window.location.href='index.html'; }
 
   // عرض اسم المندوب
   document.getElementById('userInfo').textContent = `المندوب: ${session.username} — الدور: ${session.role}`;
 
   // أزرار
-  document.getElementById('logout').addEventListener('click', ()=> { localStorage.removeItem(SESSION_KEY); window.location.href='login.html'; });
+  document.getElementById('logout').addEventListener('click', ()=> { localStorage.removeItem(SESSION_KEY); window.location.href='index.html'; });
   document.getElementById('goAdmin').addEventListener('click', ()=> { window.location.href='admin.html'; });
 
   // ====== Firebase configuration ======
